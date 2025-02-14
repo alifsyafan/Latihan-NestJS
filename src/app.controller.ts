@@ -1,35 +1,67 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { AppService } from './app.service';
-import { ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { CreateMahasiswaDTO } from './dto/create-mahasiswa.dto';
-import { RegisterUserDTO } from './dto/register-user.dto';
+import { PassThrough } from 'stream';
 import { plainToInstance } from 'class-transformer';
 import { Response } from 'express';
 import { User } from './entity/user.entity';
-import { UserDecorator } from './user.decorator';
 import { AuthGuard } from './auth.guard';
-
-
-
+import { UserDecorator } from './user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Query } from '@nestjs/common'; // Import decorator Query
+import { SearchMahasiswaDTO } from './dto/search-mahasiswa.dto';
+import { RegisterUserDTO } from './dto/register-user.dto';
 
 @Controller()
 export class AppController {
-
-
-
   constructor(private readonly appService: AppService) { }
-  
-  @Post("register")
-  @ApiBody({ type: RegisterUserDTO })
-  register(@Body() user: RegisterUserDTO) {
-    return this.appService.register(user)
+
+  // Endpoint pencarian mahasiswa menggunakan query
+  @Get('mahasiswa/search')
+  searchMahasiswa(@Query() filters: SearchMahasiswaDTO) {
+    return this.appService.searchMahasiswa(filters);
   }
 
-  @Get("/auth")
-  @UseGuards(AuthGuard)
-  @ApiBearerAuth()
-  auth(@UserDecorator() user: User) {
-    return user
+  @Post('mahasiswa/:nim/upload')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor(`file`))
+  async uploadMahasiswaFoto(
+    @UploadedFile() file: Express.Multer.File,
+    @Param('nim') nim: string,
+  ) {
+    if (!file) throw new BadRequestException('File tidak boleh kosong');
+    return this.appService.uploadMahasiswaFoto(file, nim);
+  }
+
+  @Get('mahasiswa/:nim/foto')
+  async getMahasiswaFoto(@Param('nim') nim: string, @Res() res: Response) {
+    const filename = await this.appService.getMahasiwaFoto(nim);
+    return res.sendFile(filename, { root: 'uploads' });
   }
 
   @Get()
@@ -37,44 +69,52 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @Get("mahasiswa")
+  @Get('mahasiswa')
   getMahasiswa() {
     return this.appService.getMahasiswa();
   }
 
-  @Get("mahasiswa/:nim")
-  getMahasiswaByNim(@Param("nim") nim: string) {
-    return this.appService.getMahasiswByNim(nim)
-  }
-
-  @Post("Login")
-  @ApiBody({
-    type: RegisterUserDTO
-  })
-  async login(@Body() data: RegisterUserDTO,
-    @Res({ passthrough: true }) res: Response) {
-    const result = await this.appService.login(data)
-    res.cookie("token", result.token)
-
-    result.user = plainToInstance(User, result.user)
-
-    return result
-  }
-
-  @Post("mahasiswa")
+  @Post('mahasiswa')
   @ApiBody({ type: CreateMahasiswaDTO })
-  createMahasiswa(@Body() data: CreateMahasiswaDTO) {
-    return this.appService.addMahasiswa(data)
+  createMahasiswa(@Body() mahasiswa: CreateMahasiswaDTO) {
+    return this.appService.addMahasiswa(mahasiswa);
   }
 
-  @Delete("mahasiswa/:nim")
-  deleteMahasiswa(@Param("nim") nim: string) {
-    return this.appService.menghapusMahasiswa(nim)
+  @Delete('mahasiswa/:nim')
+  deleteMahasiswa(@Param('nim') nim: string) {
+    return this.appService.deleteMahasiswa(nim);
   }
 
   @Put('mahasiswa/:nim')
   @ApiBody({ type: CreateMahasiswaDTO })
-  updateMahasiswa(@Param('nim') nim: string, @Body() data: CreateMahasiswaDTO) {
-    return this.appService.updateMahasiswa(nim, data);
+  updateMahasiswa(
+    @Param('nim') nim: string,
+    @Body() mahasiswa: CreateMahasiswaDTO,
+  ) {
+    return this.appService.updateMahasiswa(nim, mahasiswa);
+  }
+
+  @Post('register')
+  @ApiBody({ type: RegisterUserDTO })
+  registerUser(@Body() user: RegisterUserDTO) {
+    return this.appService.registerUser(user);
+  }
+
+  @Get('user')
+  getUsers() {
+    return this.appService.getUsers();
+  }
+
+  @Get('/auth')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  auth(@UserDecorator() user: User) {
+    return user;
+  }
+
+  @Get('logout')
+  getLogout(@Res() res: Response) {
+    res.cookie('token', null, { maxAge: 0 });
+    res.status(200).send({ message: 'Logout berhasil' });
   }
 }
