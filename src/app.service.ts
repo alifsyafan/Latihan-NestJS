@@ -159,7 +159,7 @@ export class AppService {
   }
 
   getHello(): string {
-    return 'Hello World! Alisultn';
+    return 'Selamat Datang! Alifsyafan';
   }
 
   async getMahasiswa() {
